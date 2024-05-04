@@ -1,10 +1,11 @@
 from database import UsersOrm, new_session
-from schemas import USER
+from schemas import USER, USER_add
 from sqlalchemy.sql import text
 from sqlalchemy.exc import DBAPIError
 import datetime
 
 class UserRepository:
+      
       # Получение всех пользователей из БД
       @classmethod
       async def get_all_users(cls) -> list:
@@ -14,6 +15,7 @@ class UserRepository:
                   users = [dict(zip(result.keys(), row)) for row in result.fetchall()]
                   return users
 
+      
       # Наложение блокировки на пользователя
       @classmethod
       async def acquire_lock(cls, id):
@@ -35,6 +37,7 @@ class UserRepository:
                   flag_internal_error = True
             return (flag_acquired, flag_internal_error)
 
+      
       # Снятие блокировки с пользователя
       @classmethod
       async def release_lock(cls, id):
@@ -52,15 +55,7 @@ class UserRepository:
                   flag_internal_error = True
                   flag_released = False
             return (flag_released, flag_internal_error)
-
-      # Получение пользователя по id из БД
-      '''@classmethod
-      async def get_user_by_id(cls, id) -> list:
-            async with new_session() as session:
-                  query = text('SELECT * FROM users WHERE id = :id;')
-                  result = await session.execute(query, {'id': id})
-                  user = [dict(zip(result.keys(), row)) for row in result.fetchall()]
-                  return user'''
+      
       
       # Добавление пользователя в БД
       @classmethod
@@ -78,6 +73,42 @@ class UserRepository:
             except Exception as _:
                   flag_inserted = False
             return flag_inserted
+
+
+      # Обновление данных пользователя
+      @classmethod
+      async def update_user(cls, id, data: USER_add):
+            flag_updated = False
+            try:
+                  async with new_session() as session:
+                        user_dict = data.model_dump()
+
+                        # Составление sql запроса
+                        sqlStatement = text('''
+                        UPDATE users 
+                        SET 
+                              login = :login, 
+                              password = :password, 
+                              env = :env, 
+                              domain = :domain 
+                        WHERE id = :id
+                        ''')
+
+                        # Передача значений через параметры запроса
+                        await session.execute(sqlStatement, {
+                        'login': user_dict['login'] if user_dict['login'] != '_' else None,
+                        'password': user_dict['password'] if user_dict['password'] != '_' else None,
+                        'env': user_dict['env'] if user_dict['env'] != '_' else None,
+                        'domain': user_dict['domain'] if user_dict['domain'] != '_' else None,
+                        'id': id
+                        })
+                        await session.flush()
+                        await session.commit()
+                        flag_updated = True
+            except DBAPIError as _:
+                  flag_updated = False
+            return flag_updated
+
 
       # Удаление пользователя по id из БД
       @classmethod
